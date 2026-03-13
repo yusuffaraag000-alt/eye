@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D Model Viewer Pro</title>
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a0a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+        }
+
+        /* Menu - responsive design */
+        #menu {
+            width: min(320px, 85vw);
+            background: linear-gradient(145deg, #0f0f1a 0%, #1a1a2a 100%);
+            color: white;
+            padding: clamp(15px, 3vw, 25px) clamp(12px, 2vw, 20px);
+            overflow-y: auto;
+            border-right: 1px solid rgba(255, 215, 0, 0.15);
+            box-shadow: 10px 0 30px rgba(0, 0, 0, 0.7);
+            z-index: 10;
+            height: 100vh;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            position: relative;
+        }
+
+        #menu.collapsed {
+            transform: translateX(-100%);
+        }
+
+        #menu h2 {
+            margin: 0 0 20px 0;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            font-size: clamp(1rem, 4vw, 1.3rem);
+            background: linear-gradient(135deg, #ffd700, #ffaa00);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            border-bottom: 2px solid rgba(255, 215, 0, 0.3);
+            padding-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            word-break: break-word;
+        }
+
+        .parts-counter {
+            font-size: clamp(0.75rem, 2.5vw, 0.85rem);
+            color: #888;
+            margin-bottom: 20px;
+            padding: 8px 15px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 30px;
+            border: 1px solid rgba(255, 215, 0, 0.1);
+            display: inline-block;
+        }
+
+        #partsList {
+            display: flex;
+            flex-direction: column;
+            gap: clamp(6px, 1.5vw, 10px);
+        }
+
+        .part {
+            padding: clamp(10px, 2.5vw, 14px) clamp(12px, 3vw, 18px);
+            background: rgba(20, 20, 30, 0.6);
+            cursor: pointer;
+            border-radius: clamp(8px, 2vw, 12px);
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 215, 0, 0.1);
+            font-size: clamp(0.8rem, 2.5vw, 0.95rem);
+            display: flex;
+            align-items: center;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            color: #ddd;
+            font-weight: 400;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            word-break: break-word;
+        }
+
+        .part:hover {
+            background: rgba(255, 215, 0, 0.1);
+            border-color: #ffd700;
+            transform: translateX(8px);
+            box-shadow: 0 6px 12px rgba(255, 215, 0, 0.2);
+            color: white;
+        }
+
+        .part.active {
+            background: linear-gradient(135deg, #ffd700, #ffaa00);
+            border-color: #ffffff;
+            box-shadow: 0 0 25px rgba(255, 215, 0, 0.5);
+            font-weight: 600;
+            color: #000;
+            transform: scale(1.02);
+        }
+
+        .part.active::before {
+            content: "✦";
+            margin-right: 12px;
+            font-size: 1rem;
+        }
+
+        /* Toggle menu button - responsive */
+        #toggleMenu {
+            position: absolute;
+            left: min(320px, 85vw);
+            top: max(15px, 3vh);
+            width: clamp(40px, 6vw, 45px);
+            height: clamp(40px, 6vw, 45px);
+            background: linear-gradient(135deg, #ffd700, #ffaa00);
+            border: none;
+            border-radius: 0 15px 15px 0;
+            color: #000;
+            cursor: pointer;
+            font-size: clamp(1.1rem, 4vw, 1.3rem);
+            z-index: 20;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 5px 5px 20px rgba(255, 215, 0, 0.3);
+            font-weight: bold;
+        }
+
+        #toggleMenu.collapsed {
+            left: 0;
+        }
+
+        #toggleMenu:hover {
+            background: linear-gradient(135deg, #ffaa00, #ff8800);
+            transform: scale(1.1);
+            box-shadow: 0 0 30px #ffd700;
+        }
+
+        /* Viewer container */
+        .viewer-container {
+            flex: 1;
+            position: relative;
+            background: #000;
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        model-viewer {
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 50% 50%, #1a1a2e 0%, #000000 100%);
+            --poster-color: transparent;
+            --progress-bar-color: #ffd700;
+            --progress-bar-height: 2px;
+        }
+
+        /* Toolbar - responsive */
+        .toolbar {
+            position: absolute;
+            bottom: max(15px, 3vh);
+            right: max(15px, 3vw);
+            display: flex;
+            gap: clamp(8px, 2vw, 15px);
+            z-index: 15;
+            background: rgba(10, 10, 15, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: clamp(8px, 2vw, 12px) clamp(12px, 3vw, 20px);
+            border-radius: 60px;
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .tool-btn {
+            width: clamp(40px, 8vw, 45px);
+            height: clamp(40px, 8vw, 45px);
+            border-radius: 50%;
+            background: rgba(30, 30, 40, 0.8);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            color: #ffd700;
+            cursor: pointer;
+            font-size: clamp(1rem, 3.5vw, 1.2rem);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .tool-btn:hover {
+            background: #ffd700;
+            color: #000;
+            transform: translateY(-5px);
+            border-color: #fff;
+            box-shadow: 0 10px 25px #ffd700;
+        }
+
+        .tool-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Loading indicator */
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffd700;
+            font-size: clamp(0.9rem, 3.5vw, 1.2rem);
+            z-index: 5;
+            background: rgba(0, 0, 0, 0.9);
+            padding: clamp(15px, 4vw, 25px) clamp(25px, 6vw, 45px);
+            border-radius: 60px;
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 2px solid #ffd700;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+            box-shadow: 0 0 50px rgba(255, 215, 0, 0.3);
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-align: center;
+            white-space: nowrap;
+            max-width: 90vw;
+        }
+
+        @media (max-width: 480px) {
+            .loading {
+                white-space: normal;
+                width: 80%;
+            }
+        }
+
+        .loading.show {
+            opacity: 1;
+        }
+
+        /* Part info panel - responsive */
+        .part-info {
+            position: absolute;
+            top: max(15px, 3vh);
+            right: max(15px, 3vw);
+            background: rgba(10, 10, 15, 0.9);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            padding: clamp(15px, 3vw, 25px) clamp(20px, 4vw, 35px);
+            border-radius: 20px;
+            color: white;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 215, 0, 0.1);
+            z-index: 15;
+            max-width: min(350px, 90vw);
+            transform: translateX(120%);
+            transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            border-left: 5px solid #ffd700;
+        }
+
+        @media (max-width: 768px) {
+            .part-info {
+                top: auto;
+                bottom: max(15px, 3vh);
+                right: max(15px, 3vw);
+                max-width: min(300px, 85vw);
+            }
+        }
+
+        .part-info.show {
+            transform: translateX(0);
+        }
+
+        .part-info h3 {
+            color: #ffd700;
+            margin-bottom: 12px;
+            font-weight: 600;
+            font-size: clamp(1.2rem, 4vw, 1.5rem);
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+            word-break: break-word;
+        }
+
+        .part-info p {
+            font-size: clamp(0.85rem, 3vw, 1rem);
+            color: #ccc;
+            margin: 8px 0;
+            line-height: 1.6;
+            word-break: break-word;
+        }
+
+        .part-info .badge {
+            display: inline-block;
+            background: rgba(255, 215, 0, 0.15);
+            padding: 6px 15px;
+            border-radius: 30px;
+            font-size: clamp(0.8rem, 2.5vw, 0.9rem);
+            margin-top: 15px;
+            color: #ffd700;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            font-weight: 500;
+        }
+
+        .no-parts {
+            text-align: center;
+            color: #666;
+            padding: 40px 20px;
+            font-style: italic;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 15px;
+            border: 1px dashed #ffd70033;
+            word-break: break-word;
+        }
+
+        /* Zoom controls - responsive */
+        .zoom-controls {
+            position: absolute;
+            bottom: max(15px, 3vh);
+            left: max(15px, 3vw);
+            display: flex;
+            gap: clamp(8px, 2vw, 15px);
+            z-index: 15;
+            background: rgba(10, 10, 15, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: clamp(8px, 2vw, 12px) clamp(12px, 3vw, 20px);
+            border-radius: 60px;
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .zoom-btn {
+            width: clamp(40px, 8vw, 45px);
+            height: clamp(40px, 8vw, 45px);
+            border-radius: 50%;
+            background: rgba(30, 30, 40, 0.8);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            color: #ffd700;
+            cursor: pointer;
+            font-size: clamp(1.3rem, 4vw, 1.5rem);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .zoom-btn:hover {
+            background: #ffd700;
+            color: #000;
+            transform: scale(1.1);
+            border-color: #fff;
+            box-shadow: 0 0 20px #ffd700;
+        }
+
+        .zoom-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Quality badge */
+        .quality-badge {
+            position: absolute;
+            top: max(15px, 3vh);
+            left: max(15px, 3vw);
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: clamp(6px, 2vw, 10px) clamp(12px, 3vw, 20px);
+            border-radius: 40px;
+            color: #ffd700;
+            font-size: clamp(0.7rem, 2.5vw, 0.85rem);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            z-index: 15;
+            letter-spacing: 1.5px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 480px) {
+            .quality-badge {
+                top: max(15px, 2vh);
+                left: 50%;
+                transform: translateX(-50%);
+                white-space: normal;
+                text-align: center;
+                width: auto;
+            }
+        }
+
+        /* Touch optimizations */
+        @media (hover: none) and (pointer: coarse) {
+            .part:hover {
+                transform: none;
+            }
+            
+            .tool-btn:hover {
+                transform: none;
+            }
+            
+            .zoom-btn:hover {
+                transform: none;
+            }
+            
+            .part {
+                -webkit-tap-highlight-color: rgba(255, 215, 0, 0.3);
+            }
+        }
+
+        /* Landscape orientation fixes */
+        @media (orientation: landscape) and (max-height: 600px) {
+            #menu {
+                padding: 10px;
+            }
+            
+            .part {
+                padding: 8px 12px;
+            }
+            
+            .toolbar, .zoom-controls {
+                bottom: 10px;
+            }
+            
+            .part-info {
+                top: 10px;
+                right: 10px;
+                padding: 15px;
+            }
+        }
+
+        /* Small screens */
+        @media (max-width: 360px) {
+            .toolbar {
+                right: 10px;
+                bottom: 10px;
+                padding: 6px 10px;
+            }
+            
+            .zoom-controls {
+                left: 10px;
+                bottom: 10px;
+                padding: 6px 10px;
+            }
+            
+            .tool-btn, .zoom-btn {
+                width: 35px;
+                height: 35px;
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button id="toggleMenu" title="Toggle menu">◀</button>
+    
+    <div id="menu">
+        <h2>✦ MODEL EXPLORER</h2>
+        <div class="parts-counter" id="partsCounter">Loading components...</div>
+        <div id="partsList"></div>
+    </div>
+
+    <div class="viewer-container">
+        <div class="quality-badge" id="qualityBadge">⚡ HDR MODE</div>
+        
+        <div class="loading" id="loading">
+            <span id="loadingText">LOADING 3D MODEL...</span>
+        </div>
+        
+        <model-viewer 
+            id="viewer" 
+            src="eye.glb" 
+            camera-controls 
+            shadow-intensity="2"
+            exposure="1.6"
+            environment-image="https://modelviewer.dev/shared-assets/environments/spruit_sunrise_1k_HDR.hdr"
+            auto-rotate
+            rotation-per-second="15deg"
+            interaction-prompt="none"
+            touch-action="pan-y"
+            camera-orbit="45deg 55deg 2.2m"
+            min-camera-orbit="auto auto 1.2m"
+            max-camera-orbit="auto auto 5m"
+            field-of-view="25deg"
+            interpolation-decay="120"
+            loading="eager"
+            reveal="auto"
+            tone-mapping="aces"
+            shadow-softness="0.8">
+        </model-viewer>
+
+        <div class="zoom-controls">
+            <button class="zoom-btn" id="zoomIn" title="Zoom In">+</button>
+            <button class="zoom-btn" id="zoomOut" title="Zoom Out">−</button>
+        </div>
+
+        <div class="toolbar">
+            <button class="tool-btn" id="resetView" title="Reset view">⟲</button>
+            <button class="tool-btn" id="rotateToggle" title="Toggle auto-rotate">↻</button>
+            <button class="tool-btn" id="fullscreen" title="Fullscreen">⛶</button>
+            <button class="tool-btn" id="qualityToggle" title="Toggle quality">✨</button>
+        </div>
+
+        <div class="part-info" id="partInfo">
+            <h3 id="infoTitle">Select Component</h3>
+            <p id="infoDetails">Click any part to highlight</p>
+            <div class="badge" id="materialType">Material Info</div>
+        </div>
+    </div>
+
+    <script>
+        const viewer = document.querySelector("#viewer");
+        const list = document.querySelector("#partsList");
+        const loading = document.querySelector("#loading");
+        const loadingText = document.querySelector("#loadingText");
+        const partsCounter = document.querySelector("#partsCounter");
+        const partInfo = document.querySelector("#partInfo");
+        const infoTitle = document.querySelector("#infoTitle");
+        const infoDetails = document.querySelector("#infoDetails");
+        const materialType = document.querySelector("#materialType");
+        
+        const originalColors = new Map();
+        
+        const highlightColors = [
+            [1, 0, 0, 1],        // red
+            [0, 1, 0, 1],        // green
+            [0, 0, 1, 1],        // blue
+            [1, 1, 0, 1],        // yellow
+            [1, 0, 1, 1],        // pink
+            [0, 1, 1, 1],        // cyan
+            [1, 0.5, 0, 1],      // orange
+            [0.5, 0, 1, 1]       // purple
+        ];
+
+        let currentHighlightColor = highlightColors[0];
+
+        function saveOriginalColors() {
+            if (!viewer.model) return;
+            
+            viewer.model.materials.forEach(mat => {
+                if (!originalColors.has(mat.name)) {
+                    const color = mat.pbrMetallicRoughness.baseColorFactor;
+                    originalColors.set(mat.name, color ? [...color] : [1, 1, 1, 1]);
+                }
+            });
+        }
+
+        function restoreOriginalColors() {
+            if (!viewer.model) return;
+            
+            viewer.model.materials.forEach(mat => {
+                const originalColor = originalColors.get(mat.name);
+                if (originalColor) {
+                    mat.pbrMetallicRoughness.setBaseColorFactor(originalColor);
+                    
+                    if (mat.emissiveFactor) {
+                        mat.emissiveFactor = [0, 0, 0];
+                    }
+                    
+                    mat.pbrMetallicRoughness.setRoughnessFactor(0.5);
+                    mat.pbrMetallicRoughness.setMetallicFactor(0);
+                }
+            });
+        }
+
+        function highlightMaterial(materialName) {
+            if (!viewer.model) return false;
+            
+            let found = false;
+            
+            viewer.model.materials.forEach(mat => {
+                if (mat.name === materialName) {
+                    mat.pbrMetallicRoughness.setBaseColorFactor(currentHighlightColor);
+                    
+                    if (mat.emissiveFactor) {
+                        mat.emissiveFactor = [
+                            currentHighlightColor[0] * 0.8,
+                            currentHighlightColor[1] * 0.8,
+                            currentHighlightColor[2] * 0.8
+                        ];
+                    }
+                    
+                    mat.pbrMetallicRoughness.setRoughnessFactor(0.1);
+                    mat.pbrMetallicRoughness.setMetallicFactor(0.3);
+                    
+                    found = true;
+                    
+                    infoTitle.textContent = mat.name || "Component";
+                    
+                    let colorName = "";
+                    const color = currentHighlightColor;
+                    if (color[0] === 1 && color[1] === 0 && color[2] === 0) colorName = "RED";
+                    else if (color[0] === 0 && color[1] === 1 && color[2] === 0) colorName = "GREEN";
+                    else if (color[0] === 0 && color[1] === 0 && color[2] === 1) colorName = "BLUE";
+                    else if (color[0] === 1 && color[1] === 1 && color[2] === 0) colorName = "YELLOW";
+                    else if (color[0] === 1 && color[1] === 0 && color[2] === 1) colorName = "PINK";
+                    else if (color[0] === 0 && color[1] === 1 && color[2] === 1) colorName = "CYAN";
+                    else if (color[0] === 1 && color[1] === 0.5 && color[2] === 0) colorName = "ORANGE";
+                    else if (color[0] === 0.5 && color[1] === 0 && color[2] === 1) colorName = "PURPLE";
+                    else colorName = "NEON";
+                    
+                    materialType.textContent = `${colorName} HIGHLIGHT`;
+                    infoDetails.textContent = `Component: ${mat.name || 'unnamed'}`;
+                    
+                    partInfo.classList.add('show');
+                }
+            });
+            
+            return found;
+        }
+
+        function focusOnObject(targetName) {
+            if (!viewer.model) return;
+
+            try {
+                viewer.autoRotate = false;
+                document.querySelector("#rotateToggle").style.color = "#ffd700";
+                
+                const bounds = viewer.model.bounds;
+                const size = bounds.size;
+                const center = bounds.center;
+                
+                const distance = Math.max(size.x, size.y, size.z) * 1.5;
+                
+                viewer.cameraTarget = `${center.x}m ${center.y}m ${center.z}m`;
+                viewer.cameraOrbit = `45deg 65deg ${distance}m`;
+                
+                loading.classList.add('show');
+                loadingText.textContent = `FOCUSING ON ${targetName.toUpperCase()}...`;
+                
+                setTimeout(() => {
+                    loading.classList.remove('show');
+                }, 800);
+
+            } catch (error) {
+                console.error("Focus error:", error);
+                loading.classList.remove('show');
+            }
+        }
+
+        viewer.addEventListener("load", () => {
+            loading.classList.remove('show');
+            
+            if (viewer.model && viewer.model.materials) {
+                const materials = viewer.model.materials;
+                
+                saveOriginalColors();
+                
+                partsCounter.textContent = `📦 ${materials.length} COMPONENTS`;
+                
+                list.innerHTML = '';
+                
+                let validPartsCount = 0;
+                
+                materials.forEach((mat, index) => {
+                    if (mat) {
+                        const item = document.createElement("div");
+                        item.className = "part";
+                        
+                        const materialName = mat.name || `Component ${index + 1}`;
+                        item.textContent = materialName;
+                        
+                        item.setAttribute('data-material-name', mat.name || '');
+                        item.setAttribute('data-index', index);
+                        
+                        item.addEventListener("click", () => {
+                            document.querySelectorAll(".part").forEach(p => p.classList.remove("active"));
+                            item.classList.add("active");
+                            
+                            currentHighlightColor = highlightColors[Math.floor(Math.random() * highlightColors.length)];
+                            
+                            restoreOriginalColors();
+                            
+                            const highlighted = highlightMaterial(mat.name);
+                            
+                            if (highlighted) {
+                                focusOnObject(mat.name);
+                                
+                                item.style.transform = 'scale(0.98)';
+                                setTimeout(() => {
+                                    item.style.transform = '';
+                                }, 200);
+                            } else {
+                                loadingText.textContent = "CANNOT HIGHLIGHT COMPONENT";
+                                loading.classList.add('show');
+                                setTimeout(() => loading.classList.remove('show'), 1500);
+                            }
+                        });
+                        
+                        list.appendChild(item);
+                        validPartsCount++;
+                    }
+                });
+                
+                partsCounter.textContent = `📦 ${validPartsCount} COMPONENTS`;
+                
+                if (validPartsCount > 0) {
+                    setTimeout(() => {
+                        const firstItem = list.firstChild;
+                        if (firstItem) {
+                            firstItem.classList.add("active");
+                            
+                            const firstMaterial = materials[0];
+                            if (firstMaterial) {
+                                restoreOriginalColors();
+                                highlightMaterial(firstMaterial.name);
+                                
+                                infoTitle.textContent = firstMaterial.name || "Component 1";
+                                infoDetails.textContent = "Click any part to highlight";
+                                partInfo.classList.add('show');
+                            }
+                        }
+                    }, 1000);
+                } else {
+                    partsCounter.textContent = "NO COMPONENTS FOUND";
+                    list.innerHTML = '<div class="no-parts">No materials detected in this model</div>';
+                }
+            }
+        });
+
+        const toggleMenu = document.querySelector("#toggleMenu");
+        const menu = document.querySelector("#menu");
+        
+        toggleMenu.addEventListener("click", () => {
+            menu.classList.toggle("collapsed");
+            toggleMenu.classList.toggle("collapsed");
+            toggleMenu.textContent = menu.classList.contains("collapsed") ? "▶" : "◀";
+            
+            // Adjust toggle button position for mobile
+            if (window.innerWidth <= 768) {
+                if (menu.classList.contains("collapsed")) {
+                    toggleMenu.style.left = "0";
+                } else {
+                    toggleMenu.style.left = "85vw";
+                }
+            }
+        });
+
+        let currentDistance = 2.2;
+        document.querySelector("#zoomIn").addEventListener("click", () => {
+            currentDistance = Math.max(1.2, currentDistance - 0.25);
+            viewer.cameraOrbit = `45deg 55deg ${currentDistance}m`;
+        });
+        
+        document.querySelector("#zoomOut").addEventListener("click", () => {
+            currentDistance = Math.min(5.0, currentDistance + 0.25);
+            viewer.cameraOrbit = `45deg 55deg ${currentDistance}m`;
+        });
+
+        document.querySelector("#resetView").addEventListener("click", () => {
+            viewer.cameraOrbit = "45deg 55deg 2.2m";
+            viewer.autoRotate = true;
+            document.querySelector("#rotateToggle").style.color = "#ffd700";
+            currentDistance = 2.2;
+            
+            restoreOriginalColors();
+            
+            document.querySelectorAll(".part").forEach(p => p.classList.remove("active"));
+            
+            partInfo.classList.remove('show');
+        });
+
+        document.querySelector("#rotateToggle").addEventListener("click", (e) => {
+            viewer.autoRotate = !viewer.autoRotate;
+            e.target.style.color = viewer.autoRotate ? "#ffd700" : "white";
+        });
+
+        document.querySelector("#fullscreen").addEventListener("click", () => {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                document.querySelector(".viewer-container").requestFullscreen();
+            }
+        });
+
+        let highQuality = true;
+        document.querySelector("#qualityToggle").addEventListener("click", (e) => {
+            highQuality = !highQuality;
+            if (highQuality) {
+                viewer.shadowIntensity = "2";
+                viewer.exposure = "1.6";
+                viewer.toneMapping = "aces";
+                document.querySelector("#qualityBadge").innerHTML = "⚡ HDR MODE";
+                e.target.style.color = "#ffd700";
+            } else {
+                viewer.shadowIntensity = "0.8";
+                viewer.exposure = "1.2";
+                viewer.toneMapping = "default";
+                document.querySelector("#qualityBadge").innerHTML = "⚡ PERFORMANCE MODE";
+                e.target.style.color = "white";
+            }
+        });
+
+        loading.classList.add('show');
+
+        viewer.addEventListener("error", (error) => {
+            console.error("Model loading error:", error);
+            loadingText.innerHTML = "ERROR LOADING MODEL";
+            loading.style.background = "rgba(255,0,0,0.9)";
+            loading.style.borderColor = "#ff0000";
+        });
+
+        viewer.addEventListener("model-visibility", () => {
+            const activeItem = document.querySelector(".part.active");
+            if (activeItem && viewer.model) {
+                const materialName = activeItem.getAttribute('data-material-name') || activeItem.textContent;
+                restoreOriginalColors();
+                highlightMaterial(materialName);
+            }
+        });
+
+        window.addEventListener("beforeunload", () => {
+            originalColors.clear();
+        });
+
+        // Handle orientation change
+        window.addEventListener('resize', () => {
+            // Adjust UI for orientation
+            if (window.innerWidth <= 768) {
+                if (!menu.classList.contains("collapsed")) {
+                    toggleMenu.style.left = "85vw";
+                }
+            } else {
+                toggleMenu.style.left = menu.classList.contains("collapsed") ? "0" : "320px";
+            }
+        });
+
+        // Touch device optimizations
+        if ('ontouchstart' in window) {
+            viewer.style.touchAction = 'pan-y';
+            
+            // Prevent double-tap zoom
+            document.addEventListener('touchstart', (e) => {
+                if (e.touches.length > 1) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+        }
+
+        // Initial adjustment
+        setTimeout(() => {
+            if (window.innerWidth <= 768 && !menu.classList.contains("collapsed")) {
+                toggleMenu.style.left = "85vw";
+            }
+        }, 100);
+    </script>
+</body>
+</html>
